@@ -108,7 +108,7 @@ rsync -av roms/ pi@10.0.0.1:~/web/roms/
 
 Or pull the SD card directly and copy to the `roms/` directory on the card.
 
-> **Note** For obvious reasons I will not be providing direct downloads or links to any roms.
+> **Note:** For obvious reasons I will not be providing direct downloads or links to any roms.
 
 ---
 
