@@ -1,0 +1,582 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PiCon</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      background: #111;
+      color: #eee;
+      font-family: monospace;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      overflow: hidden;
+    }
+    h1 { margin-bottom: 20px; font-size: 1.4em; color: #0f0; }
+    #status { margin-bottom: 16px; font-size: 0.85em; color: #aaa; }
+    #top-bar { margin-bottom: 16px; display: flex; flex-wrap: wrap; justify-content: center; gap: 4px; }
+    select, button {
+      background: #222;
+      color: #eee;
+      border: 1px solid #444;
+      padding: 8px 16px;
+      font-family: monospace;
+      font-size: 1em;
+      cursor: pointer;
+      border-radius: 4px;
+    }
+    button:hover { background: #333; }
+    #canvas-container {
+      width: 100%;
+      max-width: 800px;
+      aspect-ratio: 3/2;
+      background: #000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      position: relative;
+    }
+    canvas { width: 100%; height: 100%; }
+
+    /* Overlay */
+    #overlay {
+      display: none;
+      position: fixed;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(0,0,0,0.88);
+      z-index: 100;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+    }
+    #overlay.visible { display: flex; }
+    #overlay h2 { color: #0f0; margin-bottom: 8px; font-size: 1.2em; }
+    #overlay-hint { color: #555; font-size: 0.75em; margin-bottom: 16px; }
+
+    /* Console tabs in overlay */
+    #console-tabs {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-bottom: 12px;
+      max-width: 480px;
+      justify-content: center;
+    }
+    .console-tab {
+      background: #222;
+      border: 1px solid #333;
+      color: #aaa;
+      padding: 5px 12px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-family: monospace;
+      font-size: 0.8em;
+      text-transform: uppercase;
+    }
+    .console-tab:hover { background: #2a2a2a; }
+    .console-tab.active { background: #003300; border-color: #0f0; color: #0f0; }
+
+    #rom-picker {
+      list-style: none;
+      max-height: 55vh;
+      overflow-y: auto;
+      width: 460px;
+      border: 1px solid #333;
+      border-radius: 6px;
+    }
+    #rom-picker li {
+      padding: 10px 16px;
+      cursor: pointer;
+      border-bottom: 1px solid #1a1a1a;
+      transition: background 0.1s;
+      font-size: 0.9em;
+    }
+    #rom-picker li:last-child { border-bottom: none; }
+    #rom-picker li:hover { background: #1a1a1a; }
+    #rom-picker li.selected { background: #003300; color: #0f0; }
+
+    /* Toast */
+    #toast {
+      position: fixed;
+      bottom: 30px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: #222;
+      border: 1px solid #444;
+      color: #eee;
+      padding: 10px 24px;
+      border-radius: 20px;
+      font-size: 0.85em;
+      opacity: 0;
+      transition: opacity 0.3s;
+      z-index: 200;
+      pointer-events: none;
+      white-space: nowrap;
+    }
+    #toast.show { opacity: 1; }
+
+    /* Kill confirm overlay */
+    #confirm-overlay {
+      display: none;
+      position: fixed;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(0,0,0,0.92);
+      z-index: 300;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 24px;
+    }
+    #confirm-overlay.visible { display: flex; }
+    #confirm-overlay p { color: #eee; font-size: 1.1em; }
+    #confirm-buttons { display: flex; gap: 16px; }
+    #confirm-buttons button { font-size: 1em; padding: 10px 32px; }
+    #confirm-yes { border-color: #f00; color: #f00; }
+    #confirm-yes:hover { background: #1a0000; }
+    #confirm-no { border-color: #0f0; color: #0f0; }
+    #confirm-no:hover { background: #001a00; }
+  </style>
+</head>
+<body>
+  <h1>PiCon</h1>
+  <div id="status">Connecting to controller...</div>
+  <div id="info"> L+R: rom menu &nbsp;|&nbsp; Start+Select: quit &nbsp;|&nbsp; Start+L/R: save/load </div>
+  <div id="top-bar">
+    <button onclick="loadRomList()">↺ Refresh</button>
+    <button onclick="saveState()">💾 Save</button>
+    <button onclick="promptLoadState()">📂 Load</button>
+  </div>
+  <div id="canvas-container">
+    <canvas id="canvas"></canvas>
+  </div>
+
+  <!-- ROM picker overlay -->
+  <div id="overlay">
+    <h2>Select ROM</h2>
+    <div id="overlay-hint">↑↓ navigate &nbsp;|&nbsp; A to launch &nbsp;|&nbsp; L/R to switch console &nbsp;|&nbsp; Select+Start to close</div>
+    <div id="console-tabs"></div>
+    <ul id="rom-picker"></ul>
+  </div>
+
+  <div id="toast"></div>
+
+  <!-- Kill ROM confirm overlay -->
+  <div id="confirm-overlay">
+    <p>Stop current ROM?</p>
+    <div id="confirm-buttons">
+      <button id="confirm-yes">A &nbsp; Yes</button>
+      <button id="confirm-no">B &nbsp; No</button>
+    </div>
+  </div>
+
+  <script>
+  (async () => {
+    const { Nostalgist } = await import('/lib/nostalgist.js')
+
+    const WS_URL   = `ws://${location.hostname}:8765`
+    const ROM_BASE = `http://${location.hostname}:8080/roms`
+    const SAVE_BASE = `http://${location.hostname}:8080/saves`
+
+    const statusEl  = document.getElementById('status')
+    const overlay   = document.getElementById('overlay')
+    const romPicker = document.getElementById('rom-picker')
+    const consoleTabs = document.getElementById('console-tabs')
+    const toast     = document.getElementById('toast')
+    const confirmOverlay = document.getElementById('confirm-overlay')
+    const confirmYes = document.getElementById('confirm-yes')
+    const confirmNo = document.getElementById('confirm-no')
+
+    let nostalgist  = null
+    let launching   = false
+    let currentRom  = null   // { console, name }
+    let sramInterval = null
+
+
+    // allRoms: [{console, name}, ...]
+    let allRoms = []
+    // grouped: { consoleName: [{console, name}, ...] }
+    let grouped = {}
+    let consoleNames = []
+    let activeConsole = null   // currently shown tab
+    let pickerIndex   = 0      // index within the active console's ROM list
+
+    // ─── Console → Nostalgist method/core map ───────────────────────────────
+    // Folder name (lowercased) → { method } or { method: 'launch', core: '...' }
+    const CONSOLE_MAP = {
+      gba:        { method: 'gba' },
+      gb:         { method: 'gb' },
+      gbc:        { method: 'gb' },        // Nostalgist uses 'gb' for both
+      nes:        { method: 'nes' },
+      famicom:    { method: 'nes' },
+      snes:       { method: 'snes' },
+      sfc:        { method: 'snes' },
+      megadrive:  { method: 'megadrive' },
+      genesis:    { method: 'megadrive' },
+      smd:        { method: 'megadrive' },
+      sms:        { method: 'sms' },
+      gamegear:   { method: 'launch', core: 'gearsystem' },
+      gg:         { method: 'launch', core: 'gearsystem' },
+      pce:        { method: 'launch', core: 'mednafen_pce_fast' },
+      pcengine:   { method: 'launch', core: 'mednafen_pce_fast' },
+      lynx:       { method: 'launch', core: 'mednafen_lynx' },
+      ngp:        { method: 'launch', core: 'mednafen_ngp' },
+      neogeopocket: { method: 'launch', core: 'mednafen_ngp' },
+      wonderswan: { method: 'launch', core: 'mednafen_wswan' },
+      ws:         { method: 'launch', core: 'mednafen_wswan' },
+      virtualboy: { method: 'launch', core: 'mednafen_vb' },
+      vb:         { method: 'launch', core: 'mednafen_vb' },
+    }
+
+    function resolveConsole(consoleName) {
+      return CONSOLE_MAP[consoleName.toLowerCase()] || { method: 'launch', core: 'fceumm' }
+    }
+
+    // ─── Toast ────────────────────────────────────────────────────────────────
+    function showToast(msg, color = '#eee') {
+      toast.textContent = msg
+      toast.style.color = color
+      toast.classList.add('show')
+      setTimeout(() => toast.classList.remove('show'), 2000)
+    }
+
+    // ─── SRAM ─────────────────────────────────────────────────────────────────
+    async function flushSRAM() {
+      if (!nostalgist || !currentRom) return
+      try {
+        const sram = await nostalgist.saveSRAM()
+        if (!sram || sram.size === 0) return
+        const saveName = saveKey(currentRom) + '.srm'
+        await fetch(`${SAVE_BASE}/${saveName}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/octet-stream' },
+          body: sram,
+        })
+      } catch(e) { console.warn('SRAM flush failed', e) }
+    }
+
+    async function fetchSRAM(rom) {
+      try {
+        const res = await fetch(`${SAVE_BASE}/${saveKey(rom)}.srm`)
+        if (!res.ok) return undefined
+        return new Blob([await res.arrayBuffer()])
+      } catch(e) { return undefined }
+    }
+
+    // save key = "console__romname" (no extension)
+    function saveKey(rom) {
+      const base = rom.name.replace(/\.[^.]+$/, '')
+      return `${rom.console}__${base}`
+    }
+
+    // ─── Save state ──────────────────────────────────────────────────────────
+    window.saveState = async function() {
+      if (!nostalgist || !currentRom) return
+      try {
+        const { state } = await nostalgist.saveState()
+        await fetch(`${SAVE_BASE}/${saveKey(currentRom)}.state`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/octet-stream' },
+          body: state,
+        })
+        showToast('State saved ✓', '#0f0')
+      } catch(e) { showToast('Save failed', '#f00'); console.error(e) }
+    }
+
+    window.promptLoadState = async function() {
+      if (!nostalgist || !currentRom) return
+      await loadStateForRom(currentRom)
+    }
+
+    async function loadStateForRom(rom) {
+      try {
+        const res = await fetch(`${SAVE_BASE}/${saveKey(rom)}.state`)
+        if (!res.ok) { showToast('No save state found', '#f80'); return }
+        await nostalgist.loadState(new Blob([await res.arrayBuffer()]))
+        showToast('State loaded ✓', '#0f0')
+      } catch(e) { showToast('Load failed', '#f00'); console.error(e) }
+    }
+
+    // ─── ROM list ─────────────────────────────────────────────────────────────
+    window.loadRomList = async function() {
+      allRoms = []
+      grouped = {}
+      consoleNames = []
+      try {
+        const res = await fetch(ROM_BASE)
+        allRoms = await res.json()   // [{console, name}, ...]
+        allRoms.forEach(rom => {
+          if (!grouped[rom.console]) grouped[rom.console] = []
+          grouped[rom.console].push(rom)
+        })
+        consoleNames = Object.keys(grouped)
+        rebuildTabs()
+        if (consoleNames.length > 0) {
+          activeConsole = consoleNames[0]
+          pickerIndex   = 0
+          buildPicker()
+        }
+      } catch(e) { console.error('Could not load ROM list', e) }
+    }
+
+
+    function rebuildTabs() {
+      consoleTabs.innerHTML = ''
+      consoleNames.forEach(con => {
+        const tab = document.createElement('div')
+        tab.className = 'console-tab'
+        tab.textContent = con
+        tab.dataset.console = con
+        tab.onclick = () => switchConsoleTab(con)
+        consoleTabs.appendChild(tab)
+      })
+      updateTabActive()
+    }
+
+    function updateTabActive() {
+      Array.from(consoleTabs.children).forEach(tab => {
+        tab.classList.toggle('active', tab.dataset.console === activeConsole)
+      })
+    }
+
+    function switchConsoleTab(con) {
+      activeConsole = con
+      pickerIndex   = 0
+      updateTabActive()
+      buildPicker()
+    }
+
+    function buildPicker() {
+      romPicker.innerHTML = ''
+      const roms = grouped[activeConsole] || []
+      roms.forEach((rom, i) => {
+        const li = document.createElement('li')
+        li.textContent = rom.name
+        li.dataset.index = i
+        li.onclick = () => { pickerIndex = i; launchFromPicker() }
+        romPicker.appendChild(li)
+      })
+      updatePickerSelection()
+    }
+
+    function updatePickerSelection() {
+      Array.from(romPicker.children).forEach((li, i) => {
+        li.classList.toggle('selected', i === pickerIndex)
+      })
+      romPicker.children[pickerIndex]?.scrollIntoView({ block: 'nearest' })
+    }
+
+    // ─── Overlay ──────────────────────────────────────────────────────────────
+    function toggleOverlay() {
+      overlay.classList.toggle('visible')
+      if (overlay.classList.contains('visible') && nostalgist) {
+        nostalgist.pause()
+      } else if (nostalgist) {
+        nostalgist.resume()
+      }
+    }
+
+    // ─── Kill ROM confirm ─────────────────────────────────────────────────────
+    function showKillConfirm() {
+      if (!nostalgist) return
+      nostalgist.pause()
+      confirmOverlay.classList.add('visible')
+    }
+ 
+    async function killRom(confirmed) {
+      confirmOverlay.classList.remove('visible')
+      if (!confirmed) {
+        if (nostalgist) nostalgist.resume()
+        return
+      }
+      await flushSRAM()
+      clearInterval(sramInterval)
+      try { nostalgist.pause() } catch(e) {}
+      window.nostalgist = null
+      nostalgist = null
+      currentRom = null
+      // Replace canvas
+      const container = document.getElementById('canvas-container')
+      const oldCanvas = document.getElementById('canvas')
+      const newCanvas = document.createElement('canvas')
+      newCanvas.id = 'canvas'
+      container.replaceChild(newCanvas, oldCanvas)
+      statusEl.textContent = 'Controller connected ✓'
+      statusEl.style.color = '#0f0'
+    }
+ 
+    confirmYes.onclick = () => killRom(true)
+    confirmNo.onclick  = () => killRom(false)
+
+
+
+    // ─── Launch ───────────────────────────────────────────────────────────────
+    async function launchFromPicker() {
+      const roms = grouped[activeConsole] || []
+      const rom  = roms[pickerIndex]
+      if (!rom) return
+      overlay.classList.remove('visible')
+      await launchRomByEntry(rom)
+    }
+
+    async function launchRomByEntry(rom) {
+      if (launching) return
+      launching = true
+
+      // Tear down existing session
+      if (window.nostalgist) {
+        await flushSRAM()
+        clearInterval(sramInterval)
+        try { window.nostalgist.pause() } catch(e) {}
+        window.nostalgist = null
+        nostalgist = null
+      }
+
+      // Replace canvas
+      const container = document.getElementById('canvas-container')
+      const oldCanvas = document.getElementById('canvas')
+      const newCanvas = document.createElement('canvas')
+      newCanvas.id = 'canvas'
+      container.replaceChild(newCanvas, oldCanvas)
+
+      statusEl.textContent = `Loading ${rom.name}…`
+      statusEl.style.color = '#ff0'
+      currentRom = rom
+
+      const sram = await fetchSRAM(rom)
+      const romUrl = `${ROM_BASE}/${encodeURIComponent(rom.console)}/${encodeURIComponent(rom.name)}`
+      const cfg = resolveConsole(rom.console)
+
+      try {
+        const opts = {
+          rom: romUrl,
+          element: document.getElementById('canvas'),
+          waitForInteraction: false,
+          resolveCoreJs: (core) => {
+            console.log('core requested:', core)
+            return `http://10.0.0.1:8080/cores/${core}_libretro.js`
+          },
+          resolveCoreWasm: (core) => `http://10.0.0.1:8080/cores/${core}_libretro.wasm`,
+          ...(sram ? { sram } : {}),
+        }
+
+        if (cfg.method === 'launch') {
+          nostalgist = window.nostalgist = await Nostalgist.launch({ core: cfg.core, ...opts })
+        } else {
+          nostalgist = window.nostalgist = await Nostalgist[cfg.method](opts)
+        }
+
+        sramInterval = setInterval(flushSRAM, 30000)
+        statusEl.textContent = `[${rom.console.toUpperCase()}] ${rom.name}`
+        statusEl.style.color = '#0f0'
+      } catch(e) {
+        statusEl.textContent = `Error loading ROM`
+        statusEl.style.color = '#f00'
+        console.error(e)
+      } finally {
+        launching = false
+      }
+    }
+
+    // ─── Controller combo handling ────────────────────────────────────────────
+    const held = new Set()
+    let comboTimer = null
+
+    function handlePress(button) {
+      held.add(button)
+
+      // L+R → toggle overlay (hold 800ms)
+      if (held.has('l') && held.has('r')) {
+        if (!comboTimer) {
+          comboTimer = setTimeout(() => {
+            toggleOverlay()
+            comboTimer = null
+          }, 800)
+        }
+        return
+      }
+    
+            // Start+Select → kill ROM
+      if (held.has('start') && button === 'select') { showKillConfirm(); return }
+      if (held.has('select') && button === 'start') { showKillConfirm(); return }    
+
+      // Start+L → save state
+      if (held.has('start') && button === 'l') { window.saveState(); return }
+      // Start+R → load state
+      if (held.has('start') && button === 'r') { window.promptLoadState(); return }
+
+            // Confirm overlay navigation
+      if (confirmOverlay.classList.contains('visible')) {
+        if (button === 'a') { killRom(true); return }
+        if (button === 'b') { killRom(false); return }
+        return
+      }
+
+
+      // Overlay navigation
+      if (overlay.classList.contains('visible')) {
+        const roms = grouped[activeConsole] || []
+        if (button === 'up') {
+          pickerIndex = Math.max(0, pickerIndex - 1)
+          updatePickerSelection()
+        } else if (button === 'down') {
+          pickerIndex = Math.min(roms.length - 1, pickerIndex + 1)
+          updatePickerSelection()
+        } else if (button === 'l') {
+          // Previous console tab
+          const idx = consoleNames.indexOf(activeConsole)
+          if (idx > 0) switchConsoleTab(consoleNames[idx - 1])
+        } else if (button === 'r') {
+          // Next console tab
+          const idx = consoleNames.indexOf(activeConsole)
+          if (idx < consoleNames.length - 1) switchConsoleTab(consoleNames[idx + 1])
+        } else if (button === 'a') {
+          launchFromPicker()
+        }
+        return
+      }
+
+      if (nostalgist) nostalgist.pressDown(button)
+    }
+
+    function handleRelease(button) {
+      held.delete(button)
+      if (!held.has('select') && !held.has('start')) {
+        clearTimeout(comboTimer)
+        comboTimer = null
+      }
+      if (!overlay.classList.contains('visible') && nostalgist) {
+        nostalgist.pressUp(button)
+      }
+    }
+
+    // ─── WebSocket ────────────────────────────────────────────────────────────
+    function connectWS() {
+      const ws = new WebSocket(WS_URL)
+      ws.onopen = () => {
+        statusEl.textContent = nostalgist ? `[${currentRom?.console?.toUpperCase()}] ${currentRom?.name}` : 'Controller connected ✓'
+        statusEl.style.color = '#0f0'
+      }
+      ws.onclose = () => {
+        statusEl.textContent = 'Controller disconnected — retrying…'
+        statusEl.style.color = '#f80'
+        setTimeout(connectWS, 2000)
+      }
+      ws.onmessage = (event) => {
+        const msg = JSON.parse(event.data)
+        if (msg.type === 'press')   handlePress(msg.button)
+        if (msg.type === 'release') handleRelease(msg.button)
+      }
+    }
+
+    connectWS()
+    loadRomList()
+  })()
+
+  </script>
+</body>
+</html>
