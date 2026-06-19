@@ -3,7 +3,7 @@
 > A handheld retro gaming console built inside a PowerA wired Switch controller shell, powered by a Raspberry Pi Zero 2W and Nostalgist.js.
 
 <p align="center">
-  <img src="docs/picon_front.jpg" alt="PiCon front view" width="600"/>
+  <img src="photos/picon_front.jpg" alt="PiCon front view" width="600"/>
 </p>
 
 <p align="center">
