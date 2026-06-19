@@ -35,6 +35,8 @@ Power is managed by a Pimoroni LiPo SHIM paired with a TP4056 charging board and
 | TP4056 charging board | USB-C charging input |
 | Latching push switch | SPST, wired EN→GND |
 
+For the controller I specifically used Power A lot50926D0401 from Best Buy
+
 ---
 
 ## Software
