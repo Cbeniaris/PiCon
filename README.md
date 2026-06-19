@@ -145,6 +145,17 @@ Cores can be downloaded from [RetroArch's core repository](https://buildbot.libr
 
 ---
 
+## Gameplay
+
+To begin playing, connect to the pi's wifi network that you configured.  Open a web browser and connect to http://10.0.0.1:8080.  You should be greeted with the GUI for the game launcher be able to use the shortcuts to load games.  Saves states are stored on a **per game** basis.  This enables you to save a state, swap devices, load your save state, and continue without interruption.
+
+#### **IMPORTANT NOTE**
+
+Currently the web player does **not** work with safari.  Apple handles ws and wss differently than other browsers and I have not worked around this as of yet.  This has been tested on Firefox and other major browsers should work with no issues as well.
+
+
+---
+
 ## Credits
 
 This project was inspired by [Abe's Projects](https://github.com/abeisgoat) and his YouTube video [*I built a magic SNES controller*](https://www.youtube.com/watch?v=5nB09pXS-Mo), in which he built a self-contained retro gaming controller using a Pi and a browser-based emulator. In his original video using his QT py, he mentioned controller inputs being laggy in longer play sessions.  I felt I could improve upon what he started by using a more powerful board like the Zero 2W.
